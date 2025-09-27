@@ -1,6 +1,7 @@
 #![no_std]
 
 use assign_resources::assign_resources;
+pub use defmt_rtt as _;
 use embassy_rp::{
     gpio::{Level, Output},
     peripherals,

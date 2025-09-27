@@ -5,8 +5,6 @@ MEMORY {
      * 2 MiB is a safe default here, although a Pico 2 has 4 MiB.
      */
     FLASH : ORIGIN = 0x10000000, LENGTH = 2048K
-    /* Config for KV Store */
-    CONFIG : ORIGIN = ORIGIN(FLASH) + LENGTH(FLASH), LENGTH = 256K
     /*
      * RAM consists of 8 banks, SRAM0-SRAM7, with a striped mapping.
      * This is usually good for performance, as it distributes load on
@@ -19,10 +17,10 @@ MEMORY {
      * of access times.
      * Example: Separate stacks for core0 and core1.
      */
-    SRAM4 : ORIGIN = 0x20080000, LENGTH = 4K
-    SRAM5 : ORIGIN = 0x20081000, LENGTH = 4K
+    SRAM8 : ORIGIN = 0x20080000, LENGTH = 4K
+    SRAM9 : ORIGIN = 0x20081000, LENGTH = 4K
 }
-__config_start = ORIGIN(CONFIG);
+
 SECTIONS {
     /* ### Boot ROM info
      *

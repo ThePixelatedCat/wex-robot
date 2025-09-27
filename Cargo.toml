@@ -62,25 +62,25 @@ nb = "1.0.0"
 # embedded-graphics = "0.8.1"
 panic-reset = "0.1.1"
 assign-resources = "0.4.1"
-ekv = "1.0.0"
+# ekv = "1.0.0"
 embedded-storage = "0.3.1"
 # micromath = "2.0.0"
 # usbd-hid = "0.8.1"
 static_cell = "2"
 # chrono = { version = "^0.4", default-features = false}
-cyw43 = { git = "https://github.com/embassy-rs/embassy", rev = "38f26137fc67beb874aa73c9a7ab2150d9f3d372", features = [
-    "defmt",
-    "firmware-logs",
-] }
-cyw43-pio = { git = "https://github.com/embassy-rs/embassy", rev = "38f26137fc67beb874aa73c9a7ab2150d9f3d372", features = [
-    "defmt",
-] }
+# cyw43 = { git = "https://github.com/embassy-rs/embassy", rev = "38f26137fc67beb874aa73c9a7ab2150d9f3d372", features = [
+#     "defmt",
+#     "firmware-logs",
+# ] }
+# cyw43-pio = { git = "https://github.com/embassy-rs/embassy", rev = "38f26137fc67beb874aa73c9a7ab2150d9f3d372", features = [
+#     "defmt",
+# ] }
 log = "0.4.27"
 chrono = { version = "0.4.41", default-features = false, features = [] }
-sntpc = { version = "0.6.0", default-features = false, features = [
-    "embassy-socket",
-    "log",
-] }
+# sntpc = { version = "0.6.0", default-features = false, features = [
+#     "embassy-socket",
+#     "log",
+# ] }
 rand_core = { version = "0.9.3", default-features = false }
 [profile.release]
 debug = 2
