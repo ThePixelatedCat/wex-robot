@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "ms-vscode.vscode-serial-monitor",
+        "tamasfe.even-better-toml",
+        "johnpapa.vscode-peacock",
+        "rust-lang.rust-analyzer"
+    ]
+}
