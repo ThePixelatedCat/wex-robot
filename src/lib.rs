@@ -6,10 +6,13 @@ use embassy_rp::{
     gpio::{Level, Output},
     peripherals,
 };
+pub use embassy_time::Timer;
 pub use panic_probe as _;
+
 pub struct Robot<'a> {
     left_motor: Drv8838<'a>,
     right_motor: Drv8838<'a>,
+    boost_en: Output<'a>,
 }
 
 assign_resources! {
@@ -30,6 +33,12 @@ assign_resources! {
         sleep: PIN_19,
         phase: PIN_20,
         enable: PIN_21,
+     },
+     leds: Leds {
+        led_0: PIN_0,
+     },
+     system: SystemPins {
+        boot_enable: PIN_22,
      }
 }
 
@@ -37,6 +46,9 @@ impl<'a> Robot<'a> {
     pub fn init() -> Self {
         let p = embassy_rp::init(Default::default());
         let r = split_resources!(p);
+
+        let led = Output::new(r.leds.led_0, Level::High);
+        core::mem::forget(led);
 
         Self {
             left_motor: Drv8838::new(
@@ -49,7 +61,16 @@ impl<'a> Robot<'a> {
                 Output::new(r.right_driver.phase, Level::Low),
                 Output::new(r.right_driver.enable, Level::Low),
             ),
+            boost_en: Output::new(r.system.boot_enable, Level::Low),
         }
+    }
+
+    pub fn enable_boost(&mut self) {
+        self.boost_en.set_high();
+    }
+
+    pub fn disable_boost(&mut self) {
+        self.boost_en.set_low();
     }
 
     pub fn set_speeds(&mut self, left_motor: i8, right_motor: i8) {

@@ -7,5 +7,5 @@ use wex_robot::Robot;
 async fn main(_spawner: embassy_executor::Spawner) {
     let mut robot = Robot::init();
 
-    robot.set_speeds(0, 0);
+    loop {}
 }
