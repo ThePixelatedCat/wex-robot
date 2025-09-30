@@ -91,7 +91,7 @@ impl<'a> Robot<'a> {
                 Output::new(r.right_driver.phase, Level::Low),
                 Pwm::new_output_b(r.right_driver.slice, r.right_driver.enable, pwm_config),
             ),
-            boost_en: Output::new(r.system.boot_enable, Level::Low),
+            boost_en: Output::new(r.system.boot_enable, Level::High),
             led_0: Output::new(r.leds.led_0, Level::Low),
             led_1: Output::new(r.leds.led_1, Level::Low),
             led_2: Output::new(r.leds.led_2, Level::Low),
@@ -123,6 +123,14 @@ impl<'a> Robot<'a> {
 
     pub fn set_led_3(&mut self, level: Level) {
         self.led_3.set_level(level);
+    }
+
+    pub fn set_led_4(&mut self, level: Level) {
+        self.led_4.set_level(level);
+    }
+
+    pub fn set_led_5(&mut self, level: Level) {
+        self.led_5.set_level(level);
     }
 
     pub fn set_speeds(&mut self, left_motor: i8, right_motor: i8) {
