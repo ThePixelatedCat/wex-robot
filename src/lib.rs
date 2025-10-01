@@ -97,19 +97,27 @@ use trouble_host::prelude::*;
 // GATT Server definition
 #[gatt_server]
 struct Server {
-    battery_service: BatteryService,
+    // battery_service: BatteryService,
+    service: RobotService,
 }
 
-/// Battery service
-#[gatt_service(uuid = service::BATTERY)]
-struct BatteryService {
-    /// Battery Level
-    #[descriptor(uuid = descriptors::VALID_RANGE, read, value = [0, 100])]
-    #[descriptor(uuid = descriptors::MEASUREMENT_DESCRIPTION, name = "hello", read, value = "Battery Level")]
-    #[characteristic(uuid = characteristic::BATTERY_LEVEL, read, notify, value = 10)]
-    level: u8,
-    #[characteristic(uuid = "408813df-5dd4-1f87-ec11-cdb001100000", write, read, notify)]
-    status: bool,
+// /// Battery service
+// #[gatt_service(uuid = service::BATTERY)]
+// struct BatteryService {
+//     /// Battery Level
+//     #[descriptor(uuid = descriptors::VALID_RANGE, read, value = [0, 100])]
+//     #[descriptor(uuid = descriptors::MEASUREMENT_DESCRIPTION, name = "hello", read, value = "Battery Level")]
+//     #[characteristic(uuid = characteristic::BATTERY_LEVEL, read, notify, value = 10)]
+//     level: u8,
+//     #[characteristic(uuid = "408813df-5dd4-1f87-ec11-cdb001100000", write, read, notify)]
+//     status: bool,
+// }
+
+#[gatt_service(uuid = "0000097d-0000-1000-8000-00805f9b34fb")]
+struct RobotService {
+    /// Write-only command characteristic
+    #[characteristic(uuid = "5cc11628-0528-4edb-af0a-5db2a02d6827", write, read)]
+    command: u8,
 }
 
 impl<'a> Robot<'a> {
@@ -325,7 +333,7 @@ where
     // info!("Starting advertising and GATT service");
     let server = Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
         name: "TrouBLE",
-        appearance: &appearance::power_device::GENERIC_POWER_DEVICE,
+        appearance: &appearance::UNKNOWN,
     }))
     .unwrap();
 
@@ -380,22 +388,22 @@ async fn gatt_events_task<P: PacketPool>(
     server: &Server<'_>,
     conn: &GattConnection<'_, '_, P>,
 ) -> Result<(), Error> {
-    let level = server.battery_service.level;
+    let command = server.service.command;
     let reason = loop {
         match conn.next().await {
             GattConnectionEvent::Disconnected { reason } => break reason,
             GattConnectionEvent::Gatt { event } => {
                 match &event {
                     GattEvent::Read(event) => {
-                        if event.handle() == level.handle {
-                            let value = server.get(&level);
-                            info!("[gatt] Read Event to Level Characteristic: {:?}", value);
+                        if event.handle() == command.handle {
+                            let value = server.get(&command);
+                            info!("[gatt] Read Event to Command Characteristic: {:?}", value);
                         }
                     }
                     GattEvent::Write(event) => {
-                        if event.handle() == level.handle {
+                        if event.handle() == command.handle {
                             info!(
-                                "[gatt] Write Event to Level Characteristic: {:?}",
+                                "[gatt] Write Event to Command Characteristic: {:?}",
                                 event.data()
                             );
                         }
@@ -406,7 +414,7 @@ async fn gatt_events_task<P: PacketPool>(
                 // in order to ensure reply is sent.
                 match event.accept() {
                     Ok(reply) => reply.send().await,
-                    Err(e) => (), //warn!("[gatt] error sending response: {:?}", e),
+                    Err(e) => log::warn!("[gatt] error sending response: {:?}", e),
                 };
             }
             _ => {} // ignore other Gatt Connection Events
@@ -423,10 +431,11 @@ async fn advertise<'values, 'server, C: Controller>(
     server: &'server Server<'values>,
 ) -> Result<GattConnection<'values, 'server, DefaultPacketPool>, BleHostError<C::Error>> {
     let mut advertiser_data = [0; 31];
+    // RobotService::
     let len = AdStructure::encode_slice(
         &[
             AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
-            AdStructure::ServiceUuids16(&[[0x0f, 0x18]]),
+            AdStructure::ServiceUuids16(&[[0x7D, 0x09]]),
             AdStructure::CompleteLocalName(name.as_bytes()),
         ],
         &mut advertiser_data[..],
@@ -456,14 +465,14 @@ async fn custom_task<C: Controller, P: PacketPool>(
     stack: &Stack<'_, C, P>,
 ) {
     let mut tick: u8 = 0;
-    let level = server.battery_service.level;
+    // let level = server.battery_service.level;
     loop {
-        tick = tick.wrapping_add(1);
-        info!("[custom_task] notifying connection of tick {}", tick);
-        if level.notify(conn, &tick).await.is_err() {
-            info!("[custom_task] error notifying connection");
-            break;
-        };
+        // tick = tick.wrapping_add(1);
+        // info!("[custom_task] notifying connection of tick {}", tick);
+        // if level.notify(conn, &tick).await.is_err() {
+        //     info!("[custom_task] error notifying connection");
+        //     break;
+        // };
         // read RSSI (Received Signal Strength Indicator) of the connection.
         if let Ok(rssi) = conn.raw().rssi(stack).await {
             info!("[custom_task] RSSI: {:?}", rssi);
