@@ -116,7 +116,6 @@ pub static COMMAND_SIGNAL: CommandSignal = Signal::new();
 impl<'a> Robot<'a> {
     pub async fn init(spawner: embassy_executor::Spawner, name: &'static str) -> Self {
         let p = embassy_rp::init(Default::default());
-        // let r = split_resources!(p);
 
         let desired_freq_hz = 25_000;
         let clock_freq_hz = embassy_rp::clocks::clk_sys_freq();
@@ -162,7 +161,7 @@ impl<'a> Robot<'a> {
         static STATE: StaticCell<cyw43::State> = StaticCell::new();
         let state = STATE.init(cyw43::State::new());
         let (_net_device, bt_device, mut control, runner) =
-            cyw43::new_with_bluetooth(state, pwr, spi, fw, btfw).await; // something goes wrong here (wish I had a debugger)
+            cyw43::new_with_bluetooth(state, pwr, spi, fw, btfw).await;
         info!("Spawning BT runner");
         spawner.spawn(cyw43_task(runner).unwrap());
         control.init(clm).await;
@@ -422,6 +421,7 @@ async fn advertise<'values, 'server, C: Controller>(
     server: &'server Server<'values>,
 ) -> Result<GattConnection<'values, 'server, DefaultPacketPool>, BleHostError<C::Error>> {
     let mut advertiser_data = [0; 31];
+
     let len = AdStructure::encode_slice(
         &[
             AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
