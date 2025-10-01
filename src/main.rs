@@ -22,6 +22,8 @@ async fn main(_spawner: embassy_executor::Spawner) {
             b'a' => robot.set_speeds(0, 25),
             b's' => robot.set_speeds(-50, -50),
             b'd' => robot.set_speeds(25, 0),
+            b'x' => robot.set_speeds(0, 0),
+            b'b' => robot.halt_motors(),
             _ => (),
         }
 
