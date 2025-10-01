@@ -33,3 +33,4 @@
 - USB deferred formatting
 - Enter boot-loader from USB (custom runner w/ defmt over USB)
 - Document robot library
+- Find a unique identifier to use during pairing?
