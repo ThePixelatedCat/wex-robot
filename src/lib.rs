@@ -1,8 +1,9 @@
 #![no_std]
 
 use assign_resources::assign_resources;
-use bt_hci::cmd::le::LeSetScanParams;
 use bt_hci::controller::ControllerCmdSync;
+use bt_hci::{cmd::le::LeSetScanParams, transport::Transport};
+use cyw43::bluetooth::BtDriver;
 use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
 pub use defmt_rtt as _;
 use embassy_futures::join::join;
@@ -15,6 +16,7 @@ use embassy_rp::{
     pwm::{Pwm, SetDutyCycle},
     usb::InterruptHandler as UsbInterruptHandler,
 };
+use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, signal::Signal};
 use embassy_time::Timer;
 pub use panic_probe as _;
 use static_cell::StaticCell;
@@ -120,6 +122,10 @@ struct RobotService {
     command: u8,
 }
 
+pub type Command = u8;
+pub type CommandSignal = Signal<ThreadModeRawMutex, Command>;
+pub static COMMAND_SIGNAL: CommandSignal = Signal::new();
+
 impl<'a> Robot<'a> {
     pub async fn init(spawner: embassy_executor::Spawner) -> Self {
         let p = embassy_rp::init(Default::default());
@@ -174,10 +180,11 @@ impl<'a> Robot<'a> {
         spawner.spawn(cyw43_task(runner).unwrap());
         control.init(clm).await;
 
-        let controller: ExternalController<_, 10> = ExternalController::new(bt_device);
+        let controller: ExternalController<BtDriver, 10> = ExternalController::new(bt_device);
 
         // ---------- START MESSING AROUND ----------
-        run(controller).await;
+
+        spawner.spawn(bt_listener(controller).unwrap());
 
         // ---------- END MESSING AROUND ----------
 
@@ -311,8 +318,13 @@ impl<'a> Drv8838<'a> {
     }
 }
 
+#[embassy_executor::task]
+async fn bt_listener(controller: ExternalController<BtDriver<'static>, 10>) -> ! {
+    run(controller).await;
+}
+
 /// Run the BLE stack.
-pub async fn run<C>(controller: C)
+pub async fn run<C>(controller: C) -> !
 where
     C: Controller,
 {
@@ -343,10 +355,11 @@ where
                 Ok(conn) => {
                     // set up tasks when the connection is established to a central, so they don't run when no one is connected.
                     let a = gatt_events_task(&server, &conn);
-                    let b = custom_task(&server, &conn, &stack);
+                    a.await;
+                    // let b = custom_task(&server, &conn, &stack);
                     // run until any task ends (usually because the connection has been closed),
                     // then return to advertising state.
-                    select(a, b).await;
+                    // select(a, b).await;
                 }
                 Err(e) => {
                     panic!("[adv] error: {:?}", e);
@@ -355,6 +368,8 @@ where
         }
     })
     .await;
+
+    unreachable!()
 }
 
 /// This is a background task that is required to run forever alongside any other BLE tasks.
@@ -394,18 +409,18 @@ async fn gatt_events_task<P: PacketPool>(
             GattConnectionEvent::Disconnected { reason } => break reason,
             GattConnectionEvent::Gatt { event } => {
                 match &event {
-                    GattEvent::Read(event) => {
-                        if event.handle() == command.handle {
-                            let value = server.get(&command);
-                            info!("[gatt] Read Event to Command Characteristic: {:?}", value);
-                        }
-                    }
+                    // GattEvent::Read(event) => {
+                    //     if event.handle() == command.handle {
+                    //         let value = server.get(&command);
+                    //         info!("[gatt] Read Event to Command Characteristic: {:?}", value);
+                    //     }
+                    // }
                     GattEvent::Write(event) => {
+                        // HERE
                         if event.handle() == command.handle {
-                            info!(
-                                "[gatt] Write Event to Command Characteristic: {:?}",
-                                event.data()
-                            );
+                            let data = event.data();
+                            log::debug!("[gatt] Write Event to Command Characteristic: {:?}", data);
+                            COMMAND_SIGNAL.signal(data[0]);
                         }
                     }
                     _ => {}
@@ -431,7 +446,6 @@ async fn advertise<'values, 'server, C: Controller>(
     server: &'server Server<'values>,
 ) -> Result<GattConnection<'values, 'server, DefaultPacketPool>, BleHostError<C::Error>> {
     let mut advertiser_data = [0; 31];
-    // RobotService::
     let len = AdStructure::encode_slice(
         &[
             AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
