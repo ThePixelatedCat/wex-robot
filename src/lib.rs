@@ -36,40 +36,40 @@ pub struct Robot<'a> {
     led_5: Output<'a>,
 }
 
-assign_resources! {
-     cyw43: CYW43Resources {
-        pwr: PIN_23,
-        cs: PIN_25,
-        sck: PIN_24,
-        mosi: PIN_29,
-        pio: PIO0,
-        dma: DMA_CH0
-     },
-     left_driver: LeftMotorDriver {
-        sleep: PIN_18,
-        phase: PIN_17,
-        enable: PIN_16,
-        slice: PWM_SLICE0
-     },
-     right_driver: RightMotorDriver {
-        sleep: PIN_19,
-        phase: PIN_20,
-        enable: PIN_21,
-        slice: PWM_SLICE2,
-     },
-     leds: Leds {
-        led_0: PIN_0,
-        led_1: PIN_1,
-        led_2: PIN_2,
-        led_3: PIN_3,
-        led_4: PIN_15,
-        led_5: PIN_14,
-     },
-     system: SystemPins {
-        boot_enable: PIN_22,
-        batt_sense: PIN_26,
-     }
-}
+// assign_resources! {
+//      cyw43: CYW43Resources {
+//         pwr: PIN_23,
+//         cs: PIN_25,
+//         sck: PIN_24,
+//         mosi: PIN_29,
+//         pio: PIO0,
+//         dma: DMA_CH0
+//      },
+//      left_driver: LeftMotorDriver {
+//         sleep: PIN_18,
+//         phase: PIN_17,
+//         enable: PIN_16,
+//         slice: PWM_SLICE0
+//      },
+//      right_driver: RightMotorDriver {
+//         sleep: PIN_19,
+//         phase: PIN_20,
+//         enable: PIN_21,
+//         slice: PWM_SLICE2,
+//      },
+//      leds: Leds {
+//         led_0: PIN_0,
+//         led_1: PIN_1,
+//         led_2: PIN_2,
+//         led_3: PIN_3,
+//         led_4: PIN_15,
+//         led_5: PIN_14,
+//      },
+//      system: SystemPins {
+//         boot_enable: PIN_22,
+//         batt_sense: PIN_26,
+//      }
+// }
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
@@ -89,7 +89,7 @@ const L2CAP_CHANNELS_MAX: usize = 1;
 impl<'a> Robot<'a> {
     pub async fn init(spawner: embassy_executor::Spawner) -> Self {
         let p = embassy_rp::init(Default::default());
-        let r = split_resources!(p);
+        // let r = split_resources!(p);
 
         let desired_freq_hz = 25_000;
         let clock_freq_hz = embassy_rp::clocks::clk_sys_freq();
@@ -113,26 +113,26 @@ impl<'a> Robot<'a> {
             (fw, clm, btfw)
         };
 
-        let pwr = Output::new(r.cyw43.pwr, Level::Low);
-        let cs = Output::new(r.cyw43.cs, Level::High);
-        let mut pio = Pio::new(r.cyw43.pio, Irqs);
+        let pwr = Output::new(p.PIN_23, Level::Low);
+        let cs = Output::new(p.PIN_25, Level::High);
+        let mut pio = Pio::new(p.PIO0, Irqs);
         let spi = PioSpi::new(
             &mut pio.common,
             pio.sm0,
             RM2_CLOCK_DIVIDER,
             pio.irq0,
             cs,
-            r.cyw43.mosi,
-            r.cyw43.sck,
-            r.cyw43.dma,
+            p.PIN_29,
+            p.PIN_24,
+            p.DMA_CH0,
         );
 
         static STATE: StaticCell<cyw43::State> = StaticCell::new();
         let state = STATE.init(cyw43::State::new());
         let (_net_device, bt_device, mut control, runner) =
             cyw43::new_with_bluetooth(state, pwr, spi, fw, btfw).await;
-        spawner.spawn(cyw43_task(runner)).unwrap();
-        control.init(clm).await;
+        // spawner.spawn(cyw43_task(runner)).unwrap();
+        // control.init(clm).await;
 
         let controller: ExternalController<_, 10> = ExternalController::new(bt_device);
         // ble_bas_peripheral::run(controller).await;
@@ -144,26 +144,22 @@ impl<'a> Robot<'a> {
 
         Self {
             left_motor: Drv8838::new(
-                Output::new(r.left_driver.sleep, Level::Low),
-                Output::new(r.left_driver.phase, Level::Low),
-                Pwm::new_output_a(
-                    r.left_driver.slice,
-                    r.left_driver.enable,
-                    pwm_config.clone(),
-                ),
+                Output::new(p.PIN_18, Level::Low),
+                Output::new(p.PIN_17, Level::Low),
+                Pwm::new_output_a(p.PWM_SLICE0, p.PIN_16, pwm_config.clone()),
             ),
             right_motor: Drv8838::new(
-                Output::new(r.right_driver.sleep, Level::Low),
-                Output::new(r.right_driver.phase, Level::Low),
-                Pwm::new_output_b(r.right_driver.slice, r.right_driver.enable, pwm_config),
+                Output::new(p.PIN_19, Level::Low),
+                Output::new(p.PIN_20, Level::Low),
+                Pwm::new_output_b(p.PWM_SLICE2, p.PIN_21, pwm_config),
             ),
-            boost_en: Output::new(r.system.boot_enable, Level::High),
-            led_0: Output::new(r.leds.led_0, Level::Low),
-            led_1: Output::new(r.leds.led_1, Level::Low),
-            led_2: Output::new(r.leds.led_2, Level::Low),
-            led_3: Output::new(r.leds.led_3, Level::Low),
-            led_4: Output::new(r.leds.led_4, Level::High),
-            led_5: Output::new(r.leds.led_5, Level::Low),
+            boost_en: Output::new(p.PIN_22, Level::High),
+            led_0: Output::new(p.PIN_0, Level::Low),
+            led_1: Output::new(p.PIN_1, Level::Low),
+            led_2: Output::new(p.PIN_2, Level::Low),
+            led_3: Output::new(p.PIN_3, Level::Low),
+            led_4: Output::new(p.PIN_15, Level::High),
+            led_5: Output::new(p.PIN_14, Level::Low),
         }
     }
 
