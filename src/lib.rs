@@ -1,14 +1,23 @@
 #![no_std]
 
 use assign_resources::assign_resources;
+use bt_hci::cmd::le::LeSetScanParams;
+use bt_hci::controller::ControllerCmdSync;
+use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
 pub use defmt_rtt as _;
 use embassy_rp::{
+    bind_interrupts,
     gpio::{Level, Output},
-    peripherals,
+    peripherals::{self, DMA_CH0, PIO0},
+    pio::{InterruptHandler, Pio},
     pwm::{Pwm, SetDutyCycle},
 };
 pub use panic_probe as _;
-
+use static_cell::StaticCell;
+use trouble_host::{
+    prelude::{DefaultPacketPool, ExternalController},
+    Address, HostResources,
+};
 pub mod prelude {
     pub use super::Robot;
     pub use embassy_rp::gpio::Level;
@@ -62,8 +71,23 @@ assign_resources! {
      }
 }
 
+bind_interrupts!(struct Irqs {
+    PIO0_IRQ_0 => InterruptHandler<PIO0>;
+});
+
+#[embassy_executor::task]
+async fn cyw43_task(
+    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>,
+) -> ! {
+    runner.run().await
+}
+
+/// Max number of connections
+const CONNECTIONS_MAX: usize = 1;
+const L2CAP_CHANNELS_MAX: usize = 1;
+
 impl<'a> Robot<'a> {
-    pub fn init() -> Self {
+    pub async fn init(spawner: embassy_executor::Spawner) -> Self {
         let p = embassy_rp::init(Default::default());
         let r = split_resources!(p);
 
@@ -75,6 +99,48 @@ impl<'a> Robot<'a> {
         let mut pwm_config = embassy_rp::pwm::Config::default();
         pwm_config.top = period;
         pwm_config.divider = divider.into();
+
+        let (fw, clm, btfw) = {
+            // IMPORTANT
+            //
+            // Download and make sure these files from https://github.com/embassy-rs/embassy/tree/main/cyw43-firmware
+            // are available in `./examples/rp-pico-2-w`. (should be automatic)
+            //
+            // IMPORTANT
+            let fw = include_bytes!("../cyw43-firmware/43439A0.bin");
+            let clm = include_bytes!("../cyw43-firmware/43439A0_clm.bin");
+            let btfw = include_bytes!("../cyw43-firmware/43439A0_btfw.bin");
+            (fw, clm, btfw)
+        };
+
+        let pwr = Output::new(r.cyw43.pwr, Level::Low);
+        let cs = Output::new(r.cyw43.cs, Level::High);
+        let mut pio = Pio::new(r.cyw43.pio, Irqs);
+        let spi = PioSpi::new(
+            &mut pio.common,
+            pio.sm0,
+            RM2_CLOCK_DIVIDER,
+            pio.irq0,
+            cs,
+            r.cyw43.mosi,
+            r.cyw43.sck,
+            r.cyw43.dma,
+        );
+
+        static STATE: StaticCell<cyw43::State> = StaticCell::new();
+        let state = STATE.init(cyw43::State::new());
+        let (_net_device, bt_device, mut control, runner) =
+            cyw43::new_with_bluetooth(state, pwr, spi, fw, btfw).await;
+        spawner.spawn(cyw43_task(runner)).unwrap();
+        control.init(clm).await;
+
+        let controller: ExternalController<_, 10> = ExternalController::new(bt_device);
+        // ble_bas_peripheral::run(controller).await;
+
+        let mut resources: HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
+            HostResources::new();
+        let address: Address = Address::random([0xff, 0x8f, 0x1b, 0x05, 0xe4, 0xff]);
+        let stack = trouble_host::new(controller, &mut resources).set_random_address(address);
 
         Self {
             left_motor: Drv8838::new(
