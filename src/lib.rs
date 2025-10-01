@@ -99,21 +99,8 @@ use trouble_host::prelude::*;
 // GATT Server definition
 #[gatt_server]
 struct Server {
-    // battery_service: BatteryService,
     service: RobotService,
 }
-
-// /// Battery service
-// #[gatt_service(uuid = service::BATTERY)]
-// struct BatteryService {
-//     /// Battery Level
-//     #[descriptor(uuid = descriptors::VALID_RANGE, read, value = [0, 100])]
-//     #[descriptor(uuid = descriptors::MEASUREMENT_DESCRIPTION, name = "hello", read, value = "Battery Level")]
-//     #[characteristic(uuid = characteristic::BATTERY_LEVEL, read, notify, value = 10)]
-//     level: u8,
-//     #[characteristic(uuid = "408813df-5dd4-1f87-ec11-cdb001100000", write, read, notify)]
-//     status: bool,
-// }
 
 #[gatt_service(uuid = "0000097d-0000-1000-8000-00805f9b34fb")]
 struct RobotService {
@@ -127,7 +114,7 @@ pub type CommandSignal = Signal<ThreadModeRawMutex, Command>;
 pub static COMMAND_SIGNAL: CommandSignal = Signal::new();
 
 impl<'a> Robot<'a> {
-    pub async fn init(spawner: embassy_executor::Spawner) -> Self {
+    pub async fn init(spawner: embassy_executor::Spawner, name: &'static str) -> Self {
         let p = embassy_rp::init(Default::default());
         // let r = split_resources!(p);
 
@@ -184,7 +171,7 @@ impl<'a> Robot<'a> {
 
         // ---------- START MESSING AROUND ----------
 
-        spawner.spawn(bt_listener(controller).unwrap());
+        spawner.spawn(bt_listener(controller, name).unwrap());
 
         // ---------- END MESSING AROUND ----------
 
@@ -319,12 +306,15 @@ impl<'a> Drv8838<'a> {
 }
 
 #[embassy_executor::task]
-async fn bt_listener(controller: ExternalController<BtDriver<'static>, 10>) -> ! {
-    run(controller).await;
+async fn bt_listener(
+    controller: ExternalController<BtDriver<'static>, 10>,
+    name: &'static str,
+) -> ! {
+    run(controller, name).await;
 }
 
 /// Run the BLE stack.
-pub async fn run<C>(controller: C) -> !
+pub async fn run<C>(controller: C, name: &str) -> !
 where
     C: Controller,
 {
@@ -344,21 +334,21 @@ where
 
     // info!("Starting advertising and GATT service");
     let server = Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
-        name: "TrouBLE",
+        name,
         appearance: &appearance::UNKNOWN,
     }))
     .unwrap();
 
     let _ = join(ble_task(runner), async {
         loop {
-            match advertise("Trouble Example", &mut peripheral, &server).await {
+            match advertise(name, &mut peripheral, &server).await {
                 Ok(conn) => {
                     // set up tasks when the connection is established to a central, so they don't run when no one is connected.
                     let a = gatt_events_task(&server, &conn);
                     a.await;
                     // let b = custom_task(&server, &conn, &stack);
-                    // run until any task ends (usually because the connection has been closed),
-                    // then return to advertising state.
+                    // // run until any task ends (usually because the connection has been closed),
+                    // // then return to advertising state.
                     // select(a, b).await;
                 }
                 Err(e) => {
@@ -373,20 +363,6 @@ where
 }
 
 /// This is a background task that is required to run forever alongside any other BLE tasks.
-///
-/// ## Alternative
-///
-/// If you didn't require this to be generic for your application, you could statically spawn this with i.e.
-///
-/// ```rust,ignore
-///
-/// #[embassy_executor::task]
-/// async fn ble_task(mut runner: Runner<'static, SoftdeviceController<'static>>) {
-///     runner.run().await;
-/// }
-///
-/// spawner.must_spawn(ble_task(runner));
-/// ```
 async fn ble_task<C: Controller, P: PacketPool>(mut runner: Runner<'_, C, P>) {
     loop {
         if let Err(e) = runner.run().await {
@@ -479,11 +455,11 @@ async fn custom_task<C: Controller, P: PacketPool>(
     stack: &Stack<'_, C, P>,
 ) {
     let mut tick: u8 = 0;
-    // let level = server.battery_service.level;
+    // let command = server.service.command;
     loop {
         // tick = tick.wrapping_add(1);
         // info!("[custom_task] notifying connection of tick {}", tick);
-        // if level.notify(conn, &tick).await.is_err() {
+        // if command.notify(conn, &tick).await.is_err() {
         //     info!("[custom_task] error notifying connection");
         //     break;
         // };
