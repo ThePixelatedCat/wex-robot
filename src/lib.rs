@@ -152,8 +152,8 @@ impl<'a> Robot<'a> {
             RM2_CLOCK_DIVIDER,
             pio.irq0,
             cs,
-            p.PIN_29,
             p.PIN_24,
+            p.PIN_29,
             p.DMA_CH0,
         );
 
@@ -163,19 +163,13 @@ impl<'a> Robot<'a> {
         let (_net_device, bt_device, mut control, runner) =
             cyw43::new_with_bluetooth(state, pwr, spi, fw, btfw).await; // something goes wrong here (wish I had a debugger)
         info!("Spawning BT runner");
-        // spawner.spawn(cyw43_task(runner).unwrap());
-        // control.init(clm).await;
+        spawner.spawn(cyw43_task(runner).unwrap());
+        control.init(clm).await;
 
-        // let controller: ExternalController<_, 10> = ExternalController::new(bt_device);
-        // ble_bas_peripheral::run(controller).await;
+        let controller: ExternalController<_, 10> = ExternalController::new(bt_device);
 
         // ---------- START MESSING AROUND ----------
-        // let mut resources: HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
-        //     HostResources::new();
-        // let address: Address = Address::random([0xff, 0x8f, 0x1b, 0x05, 0xe4, 0xff]);
-        // let stack = trouble_host::new(controller, &mut resources).set_random_address(address);
-
-        // run(controller).await;
+        run(controller).await;
 
         // ---------- END MESSING AROUND ----------
 
