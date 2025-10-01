@@ -10,10 +10,11 @@
 ### Urgent
 
 - Get Bluetooth control working (Pico)
-  - Dependency management (bump embassy versions)
-  - GATT server/ client
-  - Pairing
-- Build Bluetooth controller (PC)
+  - ~~Dependency management (bump embassy versions)~~
+  - ~~GATT server/ client~~
+  - ~~Pairing~~
+  - Fix bug where GATT disconnects after ~1 minute
+- ~~Build Bluetooth controller (PC)~~
 - Tidy into library
 - Create template repository
 - Test on WeX Laptop
