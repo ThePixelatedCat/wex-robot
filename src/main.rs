@@ -2,6 +2,7 @@
 #![no_main]
 
 use wex_robot::prelude::*;
+use wex_robot::sigKill;
 use wex_robot::COMMAND_SIGNAL as CHANNEL;
 
 #[embassy_executor::main]
@@ -24,17 +25,8 @@ async fn main(_spawner: embassy_executor::Spawner) {
             b'd' => robot.set_speeds(25, 0),
             b'x' => robot.set_speeds(0, 0),
             b'b' => robot.halt_motors(),
+            Robot::SIG_KILL => robot.halt_motors(),
             _ => (),
         }
-
-        // for i in 0..=100i8 {
-        //     robot.set_speeds(i, i);
-        //     Timer::after_millis(100).await;
-        // }
-        // Timer::after_secs(10).await;
-        // for i in (0..=100i8).rev() {
-        //     robot.set_speeds(i, i);
-        //     Timer::after_millis(100).await;
-        // }
     }
 }

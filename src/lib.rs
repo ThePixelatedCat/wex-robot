@@ -31,6 +31,10 @@ pub mod prelude {
 }
 mod usb;
 
+pub trait sigKill {
+    const SIG_KILL: u8 = b'+';
+}
+
 pub struct Robot<'a> {
     left_motor: Drv8838<'a>,
     right_motor: Drv8838<'a>,
@@ -41,6 +45,10 @@ pub struct Robot<'a> {
     led_3: Output<'a>,
     led_4: Output<'a>,
     led_5: Output<'a>,
+}
+
+impl sigKill for Robot<'_> {
+    const SIG_KILL: u8 = b'+';
 }
 
 // assign_resources! {
@@ -344,11 +352,11 @@ where
                 Ok(conn) => {
                     // set up tasks when the connection is established to a central, so they don't run when no one is connected.
                     let a = gatt_events_task(&server, &conn);
-                    a.await;
-                    // let b = custom_task(&server, &conn, &stack);
+                    // a.await;
+                    let b = custom_task(&server, &conn, &stack);
                     // // run until any task ends (usually because the connection has been closed),
                     // // then return to advertising state.
-                    // select(a, b).await;
+                    select(a, b).await;
                 }
                 Err(e) => {
                     panic!("[adv] error: {:?}", e);
@@ -398,6 +406,7 @@ async fn gatt_events_task<P: PacketPool>(
                             COMMAND_SIGNAL.signal(data[0]);
                         }
                     }
+
                     _ => {}
                 };
                 // This step is also performed at drop(), but writing it explicitly is necessary
@@ -411,6 +420,8 @@ async fn gatt_events_task<P: PacketPool>(
         }
     };
     info!("[gatt] disconnected: {:?}", reason);
+    // When it disconnects send the sig kill to the motors
+    COMMAND_SIGNAL.signal(Robot::SIG_KILL);
     Ok(())
 }
 
@@ -455,7 +466,7 @@ async fn custom_task<C: Controller, P: PacketPool>(
     stack: &Stack<'_, C, P>,
 ) {
     let mut tick: u8 = 0;
-    // let command = server.service.command;
+    let command = server.service.command;
     loop {
         // tick = tick.wrapping_add(1);
         // info!("[custom_task] notifying connection of tick {}", tick);
