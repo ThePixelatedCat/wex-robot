@@ -19,6 +19,7 @@ use embassy_rp::{
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, signal::Signal};
 use embassy_time::Timer;
 pub use panic_probe as _;
+use rand_core::{CryptoRng, RngCore};
 use static_cell::StaticCell;
 use trouble_host::{
     prelude::{DefaultPacketPool, ExternalController},
@@ -28,12 +29,12 @@ pub mod prelude {
     pub use super::Robot;
     pub use embassy_rp::gpio::Level;
     pub use embassy_time::Timer;
+    pub use trouble_host::Address;
+    pub const KILL: u8 = b'+';
+    pub use super::COMMAND_SIGNAL;
 }
 mod usb;
-
-pub trait sigKill {
-    const SIG_KILL: u8 = b'+';
-}
+use prelude::*;
 
 pub struct Robot<'a> {
     left_motor: Drv8838<'a>,
@@ -45,10 +46,6 @@ pub struct Robot<'a> {
     led_3: Output<'a>,
     led_4: Output<'a>,
     led_5: Output<'a>,
-}
-
-impl sigKill for Robot<'_> {
-    const SIG_KILL: u8 = b'+';
 }
 
 // assign_resources! {
@@ -113,7 +110,7 @@ struct Server {
 #[gatt_service(uuid = "0000097d-0000-1000-8000-00805f9b34fb")]
 struct RobotService {
     /// Write-only command characteristic
-    #[characteristic(uuid = "5cc11628-0528-4edb-af0a-5db2a02d6827", write, read)]
+    #[characteristic(uuid = "5cc11628-0528-4edb-af0a-5db2a02d6827", write, read /*, notify*/)]
     command: u8,
 }
 
@@ -122,7 +119,11 @@ pub type CommandSignal = Signal<ThreadModeRawMutex, Command>;
 pub static COMMAND_SIGNAL: CommandSignal = Signal::new();
 
 impl<'a> Robot<'a> {
-    pub async fn init(spawner: embassy_executor::Spawner, name: &'static str) -> Self {
+    pub async fn init(
+        spawner: embassy_executor::Spawner,
+        name: &'static str,
+        address: Address,
+    ) -> Self {
         let p = embassy_rp::init(Default::default());
 
         let desired_freq_hz = 25_000;
@@ -178,9 +179,11 @@ impl<'a> Robot<'a> {
 
         // ---------- START MESSING AROUND ----------
 
-        spawner.spawn(bt_listener(controller, name).unwrap());
+        spawner.spawn(bt_listener(controller, name, address).unwrap());
 
         // ---------- END MESSING AROUND ----------
+
+        log::info!("Done");
 
         Self {
             left_motor: Drv8838::new(
@@ -316,23 +319,29 @@ impl<'a> Drv8838<'a> {
 async fn bt_listener(
     controller: ExternalController<BtDriver<'static>, 10>,
     name: &'static str,
+    address: Address,
 ) -> ! {
-    run(controller, name).await;
+    run(controller, name, address).await;
 }
 
 /// Run the BLE stack.
-pub async fn run<C>(controller: C, name: &str) -> !
+pub async fn run<C>(controller: C, name: &str, address: Address) -> !
+//, random_generator: &mut RNG
 where
     C: Controller,
+    // RNG: RngCore + CryptoRng,
 {
     // Using a fixed "random" address can be useful for testing. In real scenarios, one would
     // use e.g. the MAC 6 byte array as the address (how to get that varies by the platform).
-    let address: Address = Address::random([0xff, 0x8f, 0x1a, 0x05, 0xe4, 0xff]);
+    // let address: Address = Address::random([0xff, 0x8f, 0x1a, 0x05, 0xe4, 0xff]);
     // info!("Our address = {:?}", address);
 
     let mut resources: HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
         HostResources::new();
+    // let stack = trouble_host::new(controller, &mut resources).set_random_address(address);
     let stack = trouble_host::new(controller, &mut resources).set_random_address(address);
+    // .set_random_generator_seed(random_generator)
+    // .set_io_capabilities(IoCapabilities::DisplayYesNo);
     let Host {
         mut peripheral,
         runner,
@@ -390,6 +399,13 @@ async fn gatt_events_task<P: PacketPool>(
     let reason = loop {
         match conn.next().await {
             GattConnectionEvent::Disconnected { reason } => break reason,
+            // GattConnectionEvent::PassKeyConfirm(key) => conn.pass_key_confirm()?,
+            // GattConnectionEvent::PairingComplete { security_level, .. } => {
+            //     info!("[gatt] pairing complete: {:?}", security_level);
+            // }
+            // GattConnectionEvent::PairingFailed(err) => {
+            //     error!("[gatt] pairing error: {:?}", err);
+            // }
             GattConnectionEvent::Gatt { event } => {
                 match &event {
                     // GattEvent::Read(event) => {
@@ -409,6 +425,16 @@ async fn gatt_events_task<P: PacketPool>(
 
                     _ => {}
                 };
+                // event.accept();
+
+                // let reply_result = if let Some(code) = result {
+                //     event.reject(code)
+                // } else {
+                // };
+                // match reply_result {
+                //     Ok(reply) => reply.send().await,
+                //     Err(e) => warn!("[gatt] error sending response: {:?}", e),
+                // }
                 // This step is also performed at drop(), but writing it explicitly is necessary
                 // in order to ensure reply is sent.
                 match event.accept() {
@@ -421,7 +447,7 @@ async fn gatt_events_task<P: PacketPool>(
     };
     info!("[gatt] disconnected: {:?}", reason);
     // When it disconnects send the sig kill to the motors
-    COMMAND_SIGNAL.signal(Robot::SIG_KILL);
+    COMMAND_SIGNAL.signal(KILL);
     Ok(())
 }
 

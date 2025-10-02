@@ -62,6 +62,7 @@ chrono = { version = "0.4.41", default-features = false, features = [] }
 rand_core = { version = "0.9.3", default-features = false }
 trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "5b40337c7c291e86cde74e423e7763c4315f5398", features = [
     "default-packet-pool-mtu-128",
+    # "security",
 ] }
 bt-hci = "0.6.0"
 
